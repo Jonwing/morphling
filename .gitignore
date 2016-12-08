@@ -1,0 +1,9 @@
+# python
+*.py[cod]
+*.egg
+*.so
+*.egg-info
+dist
+build
+__pycache__
+eggs
