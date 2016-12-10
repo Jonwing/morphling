@@ -26,6 +26,12 @@ class TokenBase(object):
         if matchs:
             self.setup()
 
+    def _clone(self):
+        obj = self.__class__()
+        for k, v in self.__dict__.items():
+            obj.__dict__[k] = v
+        return obj
+
     @classmethod
     def add_to_scanner(cls, scanner, match_type='d'):
         '''
@@ -144,7 +150,6 @@ class BlockCode(BlockToken):
     _leading_pattern = re.compile(r'^ {4}', re.M)
 
     def setup(self):
-        self.language = None
         self.content = self._leading_pattern.sub('', self.matchs.group(0))
         super(BlockCode, self).setup()
 
@@ -181,26 +186,36 @@ class Heading(BlockToken):
     regex = re.compile(r'^ *(#{1,6}) *([^\n]+?) *#* *(?:\n+|$)')
 
     def setup(self):
+        self.is_head = True
         self.heading_level = len(self.matchs.group(1))
         self.content = self.matchs.group(2)
         super(Heading, self).setup()
+        self.scanner.parse(self.content, self.scanner.default_inline_regex)
+        tail = self._clone()
+        tail.is_head = False
+        self.scanner.tokens.append(tail)
 
     def as_html(self, scanner=None):
-        content = scanner.parse_to_html(self.content)
-        return '<h{lvl}>{cnt}</h{lvl}>\n'.format(lvl=self.heading_level, cnt=content)
+        # content = scanner.parse_to_html(self.content)
+        if self.is_head:
+            return '<h{lvl}>'.format(lvl=self.heading_level)
+        return '</h{lvl}>\n'.format(lvl=self.heading_level)
+        # return '<h{lvl}>{cnt}</h{lvl}>\n'.format(lvl=self.heading_level, cnt=content)
 
 
-class LHeading(BlockToken):
+class LHeading(Heading):
     regex = re.compile(r'^([^\n]+)\n *(=|-)+ *(?:\n+|$)')
 
     def setup(self):
+        self.is_head = True
         self.heading_level = 1 if self.matchs.group(2) == '=' else 2
         self.content = self.matchs.group(1)
-        super(LHeading, self).setup()
-
-    def as_html(self, scanner=None):
-        content = scanner.parse_to_html(self.content)
-        return '<h{lvl}>{cnt}</h{lvl}>\n'.format(lvl=self.heading_level, cnt=content)
+        self.scanner.tokens.append(self)
+        # super(LHeading, self).setup()
+        self.scanner.parse(self.content, self.scanner.default_inline_regex)
+        tail = self._clone()
+        tail.is_head = False
+        self.scanner.tokens.append(tail)
 
 
 class BlockQuote(BlockToken):
@@ -320,12 +335,20 @@ class Paragraph(BlockToken):
     )
 
     def setup(self):
+        self.is_head = True
         self.content = self.matchs.group(1).rstrip('\n')
         super(Paragraph, self).setup()
+        self.scanner.parse(self.content, self.scanner.default_inline_regex)
+        tail = self._clone()
+        tail.is_head = False
+        self.scanner.tokens.append(tail)
 
     def as_html(self, scanner=None):
-        content = scanner.parse_to_html(self.content)
-        return '<p>%s</p>\n' % content.strip(' ')
+        # content = scanner.parse_to_html(self.content)
+        # return '<p>%s</p>\n' % content.strip(' ')
+        if self.is_head:
+            return '<p>'
+        return '</p>'
 
 
 class BlockHtml(BlockToken):
@@ -394,14 +417,14 @@ class Table(BlockToken):
         cell = header = body = self.placeholder
         for index, value in enumerate(self.header):
             align = self.align[index] if index < len(self.align) else None
-            cell += self.format_cell(scanner.parse_to_html(value), header=True, align=align)
+            cell += self.format_cell(value, header=True, align=align)
         header += self.format_row(cell)
 
         for index, row in enumerate(self.cells):
             cell = self.placeholder
             for row_index, value in enumerate(row):
                 align = self.align[row_index] if row_index < len(self.align) else None
-                cell += self.format_cell(scanner.parse_to_html(value), header=True, align=align)
+                cell += self.format_cell(value, header=True, align=align)
             body += self.format_row(cell)
 
         return (
@@ -442,12 +465,20 @@ class BlockText(BlockToken):
     regex = re.compile(r'^[^\n]+')
 
     def setup(self):
+        self.is_head = True
         self.content = self.matchs.group(0)
         super(BlockText, self).setup()
+        self.scanner.parse(self.content, self.scanner.default_inline_regex)
+        tail = self._clone()
+        tail.is_head = False
+        self.scanner.tokens.append(tail)
 
     def as_html(self, scanner=None):
-        content = scanner.parse_to_html(self.content)
-        return '<p>%s</p>\n' % content.strip(' ')
+        # content = scanner.parse_to_html(self.content)
+        # return '<p>%s</p>\n' % content.strip(' ')
+        if self.is_head:
+            return '<p>'
+        return '</p>'
 
 
 # ########## InlineTokens #################
@@ -475,16 +506,29 @@ class InlineHtml(InlineToken):
         )
     )
 
-    def as_html(self, scanner=None):
-        tag = self.matchs.group(1)
-        if tag in self._tags:
-            content = scanner.parse_to_html(self.matchs.group(3), scanner.inline_htmls)
-            extra = self.matchs.group(2) or ''
-            html = '<{t}{extra}>{cnt}</{t}>'.format(t=tag, extra=extra, cnt=content)
-        else:
-            html = self.matchs.group(0)
+    def setup(self):
+        self.is_head = True
+        self.tag = self.matchs.group(1)
+        if self.tag not in self._tags:
+            return
+        self.extra = self.matchs.group(2) or ''
+        self.content = self.matchs.group(3)
+        super(InlineHtml, self).setup()
+        self.scanner.parse(self.content, self.scanner.inline_htmls)
+        tail = self._clone()
+        tail.is_head = False
+        self.scanner.tokens.append(tail)
 
-        return html
+    def as_html(self, scanner=None):
+        # tag = self.matchs.group(1)
+        # if tag in self._tags:
+        #     content = scanner.parse_to_html(self.matchs.group(3), scanner.inline_htmls)
+        #     html = '<{t}{extra}>{cnt}</{t}>'.format(t=tag, extra=extra, cnt=content)
+        # else:
+        #     html = self.matchs.group(0)
+        if self.is_head:
+            return '<{tag}{ext}>'.format(tag=self.tag, ext=self.extra)
+        return '</%s>' % self.tag
 
 
 class InlineAutoLink(InlineToken):
@@ -505,22 +549,45 @@ class InlineLink(InlineToken):
         r'''\s*(<)?([\s\S]*?)(?(2)>)(?:\s+['"]([\s\S]*?)['"])?\s*'''
         r'\)'
     )
+    is_head = None
+
+    def setup(self):
+        self.line = self.matchs.group(0)
+        self.content = escape(self.matchs.group(1), quote=True)
+        self.link = escape_link(self.matchs.group(3))
+        self.title = escape(self.matchs.group(4) or '')
+        # if it's not an image link, keep parsing the content
+        if self.line[0] != '!':
+            self.is_head = True
+            self.scanner.add_token(self)
+            self.scanner.parse(self.content, self.scanner.default_inline_regex)
+            tail = self._clone()
+            tail.is_head = False
+            self.scanner.add_token(tail)
+        else:
+            self.scanner.add_token(self)
 
     def as_html(self, scanner=None):
-        line = self.matchs.group(0)
-        text = escape(self.matchs.group(1), quote=True)
-        link = escape_link(self.matchs.group(3))
-        title = self.matchs.group(4)
-        if line[0] == '!':
-            # it's an image link
-            if title:
-                html = '<img src="%s" alt="%s" title="%s">' % (
-                    link, text, escape(title, quote=True))
+        if self.is_head is None:
+            if self.title:
+                output = '<img src="%s" alt="%s" title="%s">' % (
+                    self.link, self.content, self.title)
             else:
-                html = '<img src="%s" alt="%s">' % (link, text)
-            return html
+                output = '<img src="%s" alt="%s">' % (self.link, self.content)
+        elif self.is_head:
+            output = '<a href=%s>' % self.link
         else:
-            return '<a href="%s">%s</a>' % (link, scanner.parse_to_html(text))
+            output = '</a>'
+        return output
+        # line = self.matchs.group(0)
+        # text = escape(self.matchs.group(1), quote=True)
+        # link = escape_link(self.matchs.group(3))
+        # title = self.matchs.group(4)
+        # if line[0] == '!':
+        #     # it's an image link
+        #     return html
+        # else:
+        #     return '<a href="%s">%s</a>' % (link, scanner.parse_to_html(text))
 
 
 class InlineRefLink(InlineToken):
