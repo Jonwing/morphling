@@ -15,7 +15,7 @@ _block_tag = r'(?!(?:%s)\b)\w+%s' % ('|'.join(_inline_tags), _valid_end)
 
 
 class TokenBase(object):
-    _blank_regex = re.compile(r'\s+')  # 匹配空白字符
+    _blank_regex = re.compile(r'\s+')  # blank characters
     regex = None
 
     def __init__(self, matchs=None, scanner=None):
@@ -45,6 +45,10 @@ class TokenBase(object):
 
     @classmethod
     def pattern(cls, only_pattern=True):
+        '''
+        return the pattern of a token
+        :param only_pattern: remove the '^' at the begining of the pattern
+        '''
         ptn = cls.regex.pattern
         if only_pattern and ptn.startswith('^'):
             ptn = ptn[1:]
@@ -63,6 +67,8 @@ class TokenBase(object):
     def match(cls, source, scanner=None):
         '''
         try to match the given source with cls's pattern
+        :param source: source to match
+        :param scanner: instance of a Scanner class
         '''
         match = cls.regex.match(source)
         if not match:
@@ -78,7 +84,7 @@ class TokenBase(object):
 
     def as_html(self, inline_scanner):
         '''
-        out token as html
+        output token as html
         :params inline_scanner: instance of InlineScanner
         '''
         raise NotImplementedError
@@ -116,22 +122,37 @@ class BlockLink(BlockToken):
     )
 
     def setup(self):
-        self.key = self._shrink_blank_characters(self.matchs.group(1))
+        self._refkey = self._shrink_blank_characters(self.matchs.group(1))
         self.link = self.matchs.group(2)
         self.title = self.matchs.group(3)
-        super(BlockLink, self).setup()
+        self.scanner.add_link(self)
 
     def as_html(self, scanner=None):
-        return '<p>{key} : {link}</p>'.format(key=self.key, link=self.link)
+        return '<p>[{key}] : {link}</p>'.format(key=self._refkey, link=self.link)
+
+    @property
+    def ref_key(self):
+        return self._refkey
 
 
 class BlockFootnote(BlockToken):
-    regex = re.compile(
-        r'^\[\^([^\]]+)\]: *('
-        r'[^\n]*(?:\n+|$)'  # [^key]:
-        r'(?: {1,}[^\n]*(?:\n+|$))*'
-        r')'
-    )
+    regex = re.compile(r'(\ ?\ ?\ ?)\[\^([^\]]*)\]:\s*(.*)')
+
+    def setup(self):
+        self.is_head = True
+        self.key = self._shrink_blank_characters(self.matchs.group(2) or self.matchs.group(1))
+        self.description = self.matchs.group(3)
+        self.scanner.add_token(self)
+        self.scanner.parse(self.description, self.scanner.default_inline_regex)
+        tail = self._clone()
+        tail.is_head = False
+        self.scanner.add_token(tail)
+        self.scanner.move_block_to_footnotes(self.__class__)
+
+    def as_html(self, scanner=None):
+        if self.is_head:
+            return '<li id=fn:%s>' % self.key
+        return '</li>'
 
 
 class NewLine(BlockToken):
@@ -266,9 +287,9 @@ class ListBlock(BlockToken):
     regex = re.compile(
         r'^( *)([*+-]|\d+\.) [\s\S]+?'
         r'(?:'
-        r'\n+(?=\1?(?:[-*_] *){3,}(?:\n+|$))'  # hrule
-        r'|\n+(?=%s)'  # def links
-        r'|\n+(?=%s)'  # def footnotes
+        r'\n+(?=\1?(?:[-*_] *){3,}(?:\n+|$))'
+        r'|\n+(?=%s)'
+        r'|\n+(?=%s)'
         r'|\n{2,}'
         r'(?! )'
         r'(?!\1(?:[*+-]|\d+\.) )\n*'
@@ -597,6 +618,18 @@ class InlineRefLink(InlineToken):
         r')\]\s*\[([^^\]]*)\]'
     )
 
+    def setup(self):
+        self.ref_key = self._shrink_blank_characters(self.matchs.group(2) or self.matchs.group(1))
+        self.title = self.matchs.group(1) or self.matchs.group(2)
+        super(InlineRefLink, self).setup()
+
+    def as_html(self, scanner=None):
+        links = filter(lambda x: x.ref_key == self.ref_key, self.scanner.links)
+        if not links:
+            return ''
+        link = links[-1].link
+        return '<a href={link}>{title}</a>'.format(link=link, title=self.title)
+
 
 class InlineNolink(InlineToken):
     regex = re.compile(r'^!?\[((?:\[[^\]]*\]|[^\[\]])*)\]')
@@ -614,9 +647,9 @@ class InlineUrl(InlineToken):
 
 class DoubleEmphasis(InlineToken):
     regex = re.compile(
-        r'^_{2}([\s\S]+?)_{2}(?!_)'  # __word__
+        r'^_{2}([\s\S]+?)_{2}(?!_)'
         r'|'
-        r'^\*{2}([\s\S]+?)\*{2}(?!\*)'  # **word**
+        r'^\*{2}([\s\S]+?)\*{2}(?!\*)'
     )
 
     def as_html(self, scanner=None):
@@ -625,9 +658,9 @@ class DoubleEmphasis(InlineToken):
 
 class Emphasis(InlineToken):
     regex = re.compile(
-        r'^\b_((?:__|[^_])+?)_\b'  # _word_
+        r'^\b_((?:__|[^_])+?)_\b'
         r'|'
-        r'^\*((?:\*\*|[^\*])+?)\*(?!\*)'  # *word*
+        r'^\*((?:\*\*|[^\*])+?)\*(?!\*)'
     )
 
     def as_html(self, scanner=None):
@@ -635,7 +668,7 @@ class Emphasis(InlineToken):
 
 
 class Code(InlineToken):
-    regex = re.compile(r'^(`+)\s*([\s\S]*?[^`])\s*\1(?!`)')  # `code`
+    regex = re.compile(r'^(`+)\s*([\s\S]*?[^`])\s*\1(?!`)')
 
     def as_html(self, scanner=None):
         content = escape(self.matchs.group(2), smart_amp=False)
@@ -661,6 +694,21 @@ class StrikeThrough(InlineToken):
 
 class InlineFootnote(InlineToken):
     regex = re.compile(r'^\[\^([^\]]+)\]')
+
+    def setup(self):
+        self.ref_key = self._shrink_blank_characters(self.matchs.group(1))
+        super(InlineFootnote, self).setup()
+        inline_footmotes = filter(
+            lambda x: isinstance(x, InlineFootnote), self.scanner.tokens)
+        self.index = inline_footmotes.index(self) + 1
+
+    def as_html(self, scanner=None):
+        ref_footnote = filter(
+            lambda x: isinstance(x, BlockFootnote) and
+            x.key == self.ref_key, self.scanner.footnotes)
+        if not ref_footnote:
+            return ''
+        return '<sup><a class=footnote href=#fn:%s>%d</a></sup>' % (self.ref_key, self.index)
 
 
 class InlineText(InlineToken):
