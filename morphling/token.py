@@ -82,7 +82,7 @@ class TokenBase(object):
     def setup(self):
         self.scanner.tokens.append(self)
 
-    def as_html(self, inline_scanner):
+    def as_html(self, renderer):
         '''
         output token as html
         :params inline_scanner: instance of InlineScanner
@@ -102,16 +102,25 @@ class TokenBase(object):
 
 class BlockToken(TokenBase):
 
-    def as_html(self, scanner=None):
+    def as_html(self, renderer):
         return '[%s to be rendered. content: %s]\n' % (
             self.__class__.__name__, self.matchs.group(0))
 
 
 class InlineToken(TokenBase):
 
-    def as_html(self, scanner=None):
+    def as_html(self, renderer):
         return '[%s to be rendered. content: %s]\n' % (
             self.__class__.__name__, self.matchs.group(0))
+
+
+class SeperatedToken(TokenBase):
+    '''
+    for tokens that have seperated open and close tags.
+    '''
+    def __init__(self):
+        # set is_head
+        pass
 
 
 class BlockLink(BlockToken):
@@ -127,8 +136,8 @@ class BlockLink(BlockToken):
         self.title = self.matchs.group(3)
         self.scanner.add_link(self)
 
-    def as_html(self, scanner=None):
-        return '<p>[{key}] : {link}</p>'.format(key=self._refkey, link=self.link)
+    def as_html(self, renderer):
+        return renderer.link_definition(self.ref_key, self.link)
 
     @property
     def ref_key(self):
@@ -149,10 +158,11 @@ class BlockFootnote(BlockToken):
         self.scanner.add_token(tail)
         self.scanner.move_block_to_footnotes(self.__class__)
 
-    def as_html(self, scanner=None):
+    def as_html(self, renderer):
         if self.is_head:
-            return '<li id=fn:%s>' % self.key
-        return '</li>'
+            # return '<li id=fn:%s>' % self.key
+            return renderer.open_tag('li', id='fn:%s' % self.key)
+        return renderer.close_tag('li')
 
 
 class NewLine(BlockToken):
@@ -162,7 +172,7 @@ class NewLine(BlockToken):
         if self.length > 1:
             self.scanner.tokens.append(self)
 
-    def as_html(self, scanner=None):
+    def as_html(self, renderer):
         return '\n'
 
 
@@ -174,9 +184,8 @@ class BlockCode(BlockToken):
         self.content = self._leading_pattern.sub('', self.matchs.group(0))
         super(BlockCode, self).setup()
 
-    def as_html(self, scanner=None):
-        code = escape(self.content.rstrip('\n'), smart_amp=False)
-        return '<pre><code>%s\n</code></pre>\n' % code
+    def as_html(self, renderer):
+        return renderer.fence(self.content.rstrip('\n'))
 
 
 class Fence(BlockToken):
@@ -191,16 +200,15 @@ class Fence(BlockToken):
         self.content = self.matchs.group(3)
         super(Fence, self).setup()
 
-    def as_html(self, scanner=None):
-        code = escape(self.content.rstrip('\n'), quote=True, smart_amp=False)
-        return '<pre><code class="lang-%s">%s\n</code></pre>\n' % (self.language, code)
+    def as_html(self, renderer):
+        return renderer.fence(self.content.rstrip('\n'), self.language)
 
 
 class Hrule(BlockToken):
     regex = re.compile(r'^ {0,3}[-*_](?: *[-*_]){2,} *(?:\n+|$)')
 
-    def as_html(self, scanner=None):
-        return '<hr>\n'
+    def as_html(self, renderer):
+        return renderer.hr
 
 
 class Heading(BlockToken):
@@ -216,11 +224,12 @@ class Heading(BlockToken):
         tail.is_head = False
         self.scanner.tokens.append(tail)
 
-    def as_html(self, scanner=None):
+    def as_html(self, renderer):
         # content = scanner.parse_to_html(self.content)
+        heading = 'h{lvl}'.format(lvl=self.heading_level)
         if self.is_head:
-            return '<h{lvl}>'.format(lvl=self.heading_level)
-        return '</h{lvl}>\n'.format(lvl=self.heading_level)
+            return renderer.open_tag(heading)
+        return renderer.close_tag(heading, True)
         # return '<h{lvl}>{cnt}</h{lvl}>\n'.format(lvl=self.heading_level, cnt=content)
 
 
@@ -256,10 +265,10 @@ class BlockQuote(BlockToken):
         block_end = BlockQuote(scanner=self.scanner, is_head=False)
         self.scanner.tokens.append(block_end)
 
-    def as_html(self, scanner=None):
+    def as_html(self, renderer):
         if self.is_head:
-            return '<blockquote>'
-        return '</blockquote>\n'
+            return renderer.open_tag('blockquote')
+        return renderer.close_tag('blockquote', breakline=True)
 
 
 class ListItem(BlockToken):
@@ -273,10 +282,10 @@ class ListItem(BlockToken):
         self.is_head = is_head
         super(ListItem, self).__init__(matchs, scanner)
 
-    def as_html(self, scanner=None):
+    def as_html(self, renderer):
         if self.is_head:
-            return '<li>'
-        return '</li>\n'
+            return renderer.open_tag('li')
+        return renderer.close_tag('li', breakline=True)
 
 
 class ListBullet(BlockToken):
@@ -331,11 +340,11 @@ class ListBlock(BlockToken):
         list_end = ListBlock(scanner=self.scanner, is_head=False, ordered=self.ordered)
         self.scanner.tokens.append(list_end)
 
-    def as_html(self, scanner=None):
+    def as_html(self, renderer):
         tag = 'ol' if self.ordered else 'ul'
         if self.is_head:
-            return '<%s>\n' % tag
-        return '</%s>\n' % tag
+            return renderer.open_tag(tag)
+        return renderer.close_tag(tag, breakline=False)
 
 
 class Paragraph(BlockToken):
@@ -364,12 +373,12 @@ class Paragraph(BlockToken):
         tail.is_head = False
         self.scanner.tokens.append(tail)
 
-    def as_html(self, scanner=None):
+    def as_html(self, renderer):
         # content = scanner.parse_to_html(self.content)
         # return '<p>%s</p>\n' % content.strip(' ')
         if self.is_head:
-            return '<p>'
-        return '</p>'
+            return renderer.open_tag('p')
+        return renderer.close_tag('p', breakline=True)
 
 
 class BlockHtml(BlockToken):
@@ -394,13 +403,18 @@ class BlockHtml(BlockToken):
             self.content = self.matchs.group(3)
         super(BlockHtml, self).setup()
 
-    def as_html(self, scanner=None):
+    def as_html(self, renderer):
         if self.open_tag:
-            html = '<{t}{attr}>{cnt}</{t}>\n'.format(
-                t=self.tag, attr=self.html_attrs, cnt=self.content)
+            # html = '<{t}{attr}>{cnt}</{t}>\n'.format(
+            #     t=self.tag, attr=self.html_attrs, cnt=self.content)
+            attrs = {}
+            for s in self.html_attrs.strip().split():
+                k, v = s.split('=')
+                attrs[k] = v
+            html = renderer.block_html(self.tag, self.content, **attrs)
         else:
             html = self.content
-        return escape(html)
+        return renderer.escape(html)
 
 
 class Table(BlockToken):
@@ -434,7 +448,7 @@ class Table(BlockToken):
             cells[index] = re.split(r' *\| *', cell)
         return cells
 
-    def as_html(self, scanner=None):
+    def as_html(self, renderer):
         cell = header = body = self.placeholder
         for index, value in enumerate(self.header):
             align = self.align[index] if index < len(self.align) else None
@@ -494,12 +508,12 @@ class BlockText(BlockToken):
         tail.is_head = False
         self.scanner.tokens.append(tail)
 
-    def as_html(self, scanner=None):
+    def as_html(self, renderer):
         # content = scanner.parse_to_html(self.content)
         # return '<p>%s</p>\n' % content.strip(' ')
         if self.is_head:
-            return '<p>'
-        return '</p>'
+            return renderer.open_tag('p')
+        return renderer.close_tag('p', breakline=True)
 
 
 # ########## InlineTokens #################
@@ -508,7 +522,7 @@ class BlockText(BlockToken):
 class Escape(InlineToken):
     regex = re.compile(r'^\\([\\`*{}\[\]()#+\-.!_>~|])')  # \* \+ \! ....
 
-    def as_html(self, scanner=None):
+    def as_html(self, renderer):
         return escape(self.matchs.group(1))
 
 
@@ -540,7 +554,7 @@ class InlineHtml(InlineToken):
         tail.is_head = False
         self.scanner.tokens.append(tail)
 
-    def as_html(self, scanner=None):
+    def as_html(self, renderer):
         # tag = self.matchs.group(1)
         # if tag in self._tags:
         #     content = scanner.parse_to_html(self.matchs.group(3), scanner.inline_htmls)
@@ -555,11 +569,11 @@ class InlineHtml(InlineToken):
 class InlineAutoLink(InlineToken):
     regex = re.compile(r'^<([^ >]+(@|:)[^ >]+)>')
 
-    def as_html(self, scanner=None):
+    def as_html(self, renderer):
         link = escape(self.matchs.group(1))
-        if self.matchs.group(2) == '@':
-            addr = 'mailto:%s' % link
-        return '<a href="%s">%s</a>' % (addr, link)
+        addr = 'mailto:%s' % link if self.matchs.group(2) == '@' else ''
+        # return '<a href="%s">%s</a>' % (addr, link)
+        return renderer.link(addr, link)
 
 
 class InlineLink(InlineToken):
@@ -588,13 +602,15 @@ class InlineLink(InlineToken):
         else:
             self.scanner.add_token(self)
 
-    def as_html(self, scanner=None):
+    def as_html(self, renderer):
         if self.is_head is None:
             if self.title:
-                output = '<img src="%s" alt="%s" title="%s">' % (
-                    self.link, self.content, self.title)
+                # output = '<img src="%s" alt="%s" title="%s">' % (
+                #     self.link, self.content, self.title)
+                return renderer.img(self.link, self.content, self.title)
             else:
-                output = '<img src="%s" alt="%s">' % (self.link, self.content)
+                # output = '<img src="%s" alt="%s">' % (self.link, self.content)
+                return renderer.img(self.link, alt=self.content)
         elif self.is_head:
             output = '<a href=%s>' % self.link
         else:
@@ -623,26 +639,28 @@ class InlineRefLink(InlineToken):
         self.title = self.matchs.group(1) or self.matchs.group(2)
         super(InlineRefLink, self).setup()
 
-    def as_html(self, scanner=None):
+    def as_html(self, renderer):
         links = filter(lambda x: x.ref_key == self.ref_key, self.scanner.links)
         if not links:
             return ''
         link = links[-1].link
-        return '<a href={link}>{title}</a>'.format(link=link, title=self.title)
+        # return '<a href={link}>{title}</a>'.format(link=link, title=self.title)
+        return renderer.link(link, self.title)
 
 
 class InlineNolink(InlineToken):
     regex = re.compile(r'^!?\[((?:\[[^\]]*\]|[^\[\]])*)\]')
 
-    def as_html(self, scanner=None):
-        return '<a href=#>{title}</a>'.format(title=self.matchs.group(0))
+    def as_html(self, renderer):
+        # return '<a href=#>{title}</a>'.format(title=self.matchs.group(0))
+        return renderer.link('#', self.matchs.group(0))
 
 
 class InlineUrl(InlineToken):
     regex = re.compile(r'''^(https?:\/\/[^\s<]+[^<.,:;"')\]\s])''')
 
-    def as_html(self, scanner=None):
-        return escape(self.matchs.group(1))
+    def as_html(self, renderer):
+        return renderer.escape(self.matchs.group(1))
 
 
 class DoubleEmphasis(InlineToken):
@@ -652,8 +670,9 @@ class DoubleEmphasis(InlineToken):
         r'^\*{2}([\s\S]+?)\*{2}(?!\*)'
     )
 
-    def as_html(self, scanner=None):
-        return '<strong>%s</strong>' % self.matchs.group(2) or self.matchs.group(1)
+    def as_html(self, renderer):
+        # return '<strong>%s</strong>' % self.matchs.group(2) or self.matchs.group(1)
+        return renderer.double_emphasis(self.matchs.group(2) or self.matchs.group(1))
 
 
 class Emphasis(InlineToken):
@@ -663,23 +682,26 @@ class Emphasis(InlineToken):
         r'^\*((?:\*\*|[^\*])+?)\*(?!\*)'
     )
 
-    def as_html(self, scanner=None):
-        return '<em>%s</em>' % self.matchs.group(2) or self.matchs.group(1)
+    def as_html(self, renderer):
+        # return '<em>%s</em>' % self.matchs.group(2) or self.matchs.group(1)
+        return renderer.emphasis(self.matchs.group(2) or self.matchs.group(1))
 
 
 class Code(InlineToken):
     regex = re.compile(r'^(`+)\s*([\s\S]*?[^`])\s*\1(?!`)')
 
-    def as_html(self, scanner=None):
+    def as_html(self, renderer):
         content = escape(self.matchs.group(2), smart_amp=False)
-        return '<code>%s</code>' % content
+        # return '<code>%s</code>' % content
+        return renderer.code(content)
 
 
 class LineBreak(InlineToken):
     regex = re.compile(r'^ {2,}\n(?!\s*$)')
 
-    def as_html(self, scanner=None):
-        return '<br>\n'
+    def as_html(self, renderer):
+        # return '<br>\n'
+        return renderer.line_break
 
 
 class StrikeThrough(InlineToken):
@@ -688,8 +710,9 @@ class StrikeThrough(InlineToken):
     '''
     regex = re.compile(r'^~~(?=\S)([\s\S]*?\S)~~')
 
-    def as_html(self, scanner=None):
-        return '<del>%s</del>' % self.matchs.group(1)
+    def as_html(self, renderer):
+        # return '<del>%s</del>' % self.matchs.group(1)
+        return renderer.strikethrough(self.matchs.group(1))
 
 
 class InlineFootnote(InlineToken):
@@ -702,20 +725,21 @@ class InlineFootnote(InlineToken):
             lambda x: isinstance(x, InlineFootnote), self.scanner.tokens)
         self.index = inline_footmotes.index(self) + 1
 
-    def as_html(self, scanner=None):
+    def as_html(self, renderer):
         ref_footnote = filter(
             lambda x: isinstance(x, BlockFootnote) and
             x.key == self.ref_key, self.scanner.footnotes)
         if not ref_footnote:
-            return ''
-        return '<sup><a class=footnote href=#fn:%s>%d</a></sup>' % (self.ref_key, self.index)
+            return renderer.placeholder
+        # return '<sup><a class=footnote href=#fn:%s>%d</a></sup>' % (self.ref_key, self.index)
+        return renderer.footnote_ref(self.ref_key, self.index)
 
 
 class InlineText(InlineToken):
     regex = re.compile(r'^[\s\S]+?(?=[\\<!\[_*`~]|https?://| {2,}\n|$)')
 
-    def as_html(self, scanner=None):
-        return escape(self.matchs.group(0))
+    def as_html(self, renderer):
+        return renderer.escape(self.matchs.group(0))
 
 
 blocks_default = [
