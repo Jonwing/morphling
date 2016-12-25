@@ -7,6 +7,7 @@ from .token import blocks_default, list_items, block_footnotes, inlines_default,
 class BlockScanner(object):
     '''
     BlockScanner
+    deprecated, use Scanner instead.
     '''
     default_regex = blocks_default
     list_regex = list_items
@@ -121,10 +122,17 @@ class Scanner(object):
         self._footnotes.extend(self.tokens[index:])
         self.tokens[index:] = []
 
+    def prepare(self):
+        '''
+        do some preparation before parsing
+        '''
+        pass
+
 
 class InlineScanner(BlockScanner):
     '''
     InlineScanner
+    deprecated, used Scanner instead
     '''
     default_regex = inlines_default
     inline_htmls = inline_htmls
