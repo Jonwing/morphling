@@ -80,7 +80,10 @@ class TokenBase(object):
         return '<{0}>'.format(self.__class__.__name__)
 
     def setup(self):
-        self.scanner.tokens.append(self)
+        '''
+        add the token self to scanner's parsed token queue
+        '''
+        self.scanner.add_token(self)
 
     def as_html(self, renderer):
         '''
@@ -170,7 +173,7 @@ class NewLine(BlockToken):
 
     def setup(self):
         if self.length > 1:
-            self.scanner.tokens.append(self)
+            self.scanner.add_token(self)
 
     def as_html(self, renderer):
         return '\n'
@@ -222,7 +225,7 @@ class Heading(BlockToken):
         self.scanner.parse(self.content, self.scanner.default_inline_regex)
         tail = self._clone()
         tail.is_head = False
-        self.scanner.tokens.append(tail)
+        self.scanner.add_token(tail)
 
     def as_html(self, renderer):
         # content = scanner.parse_to_html(self.content)
@@ -240,12 +243,12 @@ class LHeading(Heading):
         self.is_head = True
         self.heading_level = 1 if self.matchs.group(2) == '=' else 2
         self.content = self.matchs.group(1)
-        self.scanner.tokens.append(self)
+        self.scanner.add_token(self)
         # super(LHeading, self).setup()
         self.scanner.parse(self.content, self.scanner.default_inline_regex)
         tail = self._clone()
         tail.is_head = False
-        self.scanner.tokens.append(tail)
+        self.scanner.add_token(tail)
 
 
 class BlockQuote(BlockToken):
@@ -263,7 +266,7 @@ class BlockQuote(BlockToken):
         washed = self._leading_pattern.sub('', self.matchs.group(0))
         self.scanner.parse(washed)
         block_end = BlockQuote(scanner=self.scanner, is_head=False)
-        self.scanner.tokens.append(block_end)
+        self.scanner.add_token(block_end)
 
     def as_html(self, renderer):
         if self.is_head:
@@ -320,7 +323,7 @@ class ListBlock(BlockToken):
     def setup(self):
         self.ordered = '.' in self.matchs.group(2)
         self.is_head = True
-        self.scanner.tokens.append(self)
+        self.scanner.add_token(self)
 
         # parse list items
         items = self.list_item_token.regex.findall(self.matchs.group(0))
@@ -332,13 +335,13 @@ class ListBlock(BlockToken):
                 space = space - len(item)
                 item = re.compile(r'^ {1,%d}' % space, flags=re.M).sub('', item)
 
-            self.scanner.tokens.append(
+            self.scanner.add_token(
                 self.list_item_token(scanner=self.scanner, is_head=True))
             self.scanner.parse(item, self.scanner.list_regex)
-            self.scanner.tokens.append(
+            self.scanner.add_token(
                 self.list_item_token(scanner=self.scanner, is_head=False))
         list_end = ListBlock(scanner=self.scanner, is_head=False, ordered=self.ordered)
-        self.scanner.tokens.append(list_end)
+        self.scanner.add_token(list_end)
 
     def as_html(self, renderer):
         tag = 'ol' if self.ordered else 'ul'
@@ -371,7 +374,7 @@ class Paragraph(BlockToken):
         self.scanner.parse(self.content, self.scanner.default_inline_regex)
         tail = self._clone()
         tail.is_head = False
-        self.scanner.tokens.append(tail)
+        self.scanner.add_token(tail)
 
     def as_html(self, renderer):
         # content = scanner.parse_to_html(self.content)
@@ -506,7 +509,7 @@ class BlockText(BlockToken):
         self.scanner.parse(self.content, self.scanner.default_inline_regex)
         tail = self._clone()
         tail.is_head = False
-        self.scanner.tokens.append(tail)
+        self.scanner.add_token(tail)
 
     def as_html(self, renderer):
         # content = scanner.parse_to_html(self.content)
@@ -552,7 +555,7 @@ class InlineHtml(InlineToken):
         self.scanner.parse(self.content, self.scanner.inline_htmls)
         tail = self._clone()
         tail.is_head = False
-        self.scanner.tokens.append(tail)
+        self.scanner.add_token(tail)
 
     def as_html(self, renderer):
         # tag = self.matchs.group(1)
