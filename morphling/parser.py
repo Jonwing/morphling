@@ -24,4 +24,3 @@ class MarkdownParser(object):
             :content: text content in markdown language
         '''
         pass
-

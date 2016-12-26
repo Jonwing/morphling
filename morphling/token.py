@@ -1,7 +1,7 @@
 # coding: utf-8
 
 import re
-from .utils import escape, escape_link
+
 
 _inline_tags = [
     'a', 'em', 'strong', 'small', 's', 'cite', 'q', 'dfn', 'abbr', 'data',
@@ -526,7 +526,7 @@ class Escape(InlineToken):
     regex = re.compile(r'^\\([\\`*{}\[\]()#+\-.!_>~|])')  # \* \+ \! ....
 
     def as_html(self, renderer):
-        return escape(self.matchs.group(1))
+        return renderer.escape(self.matchs.group(1))
 
 
 class InlineHtml(InlineToken):
@@ -573,7 +573,7 @@ class InlineAutoLink(InlineToken):
     regex = re.compile(r'^<([^ >]+(@|:)[^ >]+)>')
 
     def as_html(self, renderer):
-        link = escape(self.matchs.group(1))
+        link = renderer.escape(self.matchs.group(1))
         addr = 'mailto:%s' % link if self.matchs.group(2) == '@' else ''
         # return '<a href="%s">%s</a>' % (addr, link)
         return renderer.link(addr, link)
@@ -591,9 +591,9 @@ class InlineLink(InlineToken):
 
     def setup(self):
         self.line = self.matchs.group(0)
-        self.content = escape(self.matchs.group(1), quote=True)
-        self.link = escape_link(self.matchs.group(3))
-        self.title = escape(self.matchs.group(4) or '')
+        self.content = self.matchs.group(1)
+        self.link = self.matchs.group(3)
+        self.title = self.matchs.group(4) or ''
         # if it's not an image link, keep parsing the content
         if self.line[0] != '!':
             self.is_head = True
@@ -694,7 +694,7 @@ class Code(InlineToken):
     regex = re.compile(r'^(`+)\s*([\s\S]*?[^`])\s*\1(?!`)')
 
     def as_html(self, renderer):
-        content = escape(self.matchs.group(2), smart_amp=False)
+        content = renderer.escape(self.matchs.group(2), smart_amp=False)
         # return '<code>%s</code>' % content
         return renderer.code(content)
 

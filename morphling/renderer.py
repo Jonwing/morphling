@@ -7,6 +7,7 @@ class Renderer(object):
     the default renderer for parser
     '''
     _escape_pattern = re.compile(r'&(?!#?\w+;)')
+    _not_allowed_schemes = ['javascript:', 'vbscript:']
     _p = 'p'
     tag_del = 'del'
     tag_sup = 'sup'
@@ -48,6 +49,13 @@ class Renderer(object):
             content = content.replace('"', '&quot;')
             content = content.replace("'", '&#39;')
         return content
+
+    def escape_link(self, link):
+        lower_url = link.lower().strip('\x00\x1a \n\r\t')
+        for scheme in self._not_allowed_schemes:
+            if lower_url.startswith(scheme):
+                return ''
+        return self.escape(link, quote=True, smart_amp=False)
 
     def open_tag(self, tag, **kwargs):
         extras = ['%s=%s' % (k, v) for k, v in kwargs.items() if v]
@@ -92,11 +100,11 @@ class Renderer(object):
         return '<a href={addr}>{text}<a>'.format(addr=addr, text=text)
 
     def img(self, src, alt=None, title=None):
-        seg = '<img src=%s' % src
+        seg = '<img src=%s' % self.escape_link(src) if self._escape else src
         if alt:
-            seg += 'alt=%s' % alt
+            seg += 'alt=%s' % self.escape(alt) if self._escape else alt
         if title:
-            seg += 'title=%s' % title
+            seg += 'title=%s' % self.escape(title) if self._escape else title
         return seg + '>'
 
     def fence(self, code, language=None, escape=True):
