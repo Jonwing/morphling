@@ -132,6 +132,11 @@ class Scanner(object):
             '\u00a0', ' ').replace('\u2424', '\n')
         return spaces.sub('', procceed)
 
+    def clear(self):
+        self.tokens = []
+        self._links = []
+        self._footnotes = []
+
 
 class InlineScanner(BlockScanner):
     '''
