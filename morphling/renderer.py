@@ -9,8 +9,6 @@ class Renderer(object):
     _escape_pattern = re.compile(r'&(?!#?\w+;)')
     _not_allowed_schemes = ['javascript:', 'vbscript:']
     _p = 'p'
-    tag_del = 'del'
-    tag_sup = 'sup'
 
     def __init__(self, **kwargs):
         self._escape = kwargs.get('escape', True)
@@ -59,7 +57,7 @@ class Renderer(object):
 
     def open_tag(self, tag, **kwargs):
         extras = ['%s=%s' % (k, v) for k, v in kwargs.items() if v]
-        return '<{t} {attrs}>'.format(t=tag, attrs=' '.join(extras))
+        return '<{tag} {attrs}>'.format(tag=tag, attrs=' '.join(extras))
 
     def close_tag(self, tag, breakline=False):
         if breakline:
