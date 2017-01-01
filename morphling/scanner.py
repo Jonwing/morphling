@@ -25,7 +25,7 @@ class Scanner(object):
     inline_htmls = inline_htmls
 
     def __init__(self):
-        self.tokens = []
+        self._tokens = []
         self._footnotes = []
         self._links = []
 
@@ -49,12 +49,12 @@ class Scanner(object):
                 if match:
                     break
             if match:
-                # self.tokens.append(match) Token implements this function
+                # self._tokens.append(match) Token implements this function
                 source = source[match.length:]
             else:
                 raise RuntimeError('Not match any token')
 
-        return self.tokens
+        return self._tokens
 
     @property
     def links(self):
@@ -64,8 +64,12 @@ class Scanner(object):
     def footnotes(self):
         return self._footnotes
 
+    @property
+    def tokens(self):
+        return self._tokens
+
     def add_token(self, token):
-        self.tokens.append(token)
+        self._tokens.append(token)
 
     def add_footnote(self, footnote):
         self._footnotes.append(footnote)
@@ -76,7 +80,7 @@ class Scanner(object):
     @property
     def all_tokens(self):
         # no need to include link definitions
-        return chain(self.tokens, self.footnotes)
+        return chain(self._tokens, self.footnotes)
 
     def move_block_to_footnotes(self, token_class):
         '''
@@ -84,12 +88,14 @@ class Scanner(object):
         '''
         index = -1
         try:
-            while not (isinstance(self.tokens[index], token_class) and self.tokens[index].is_head):
+            while not (
+                    isinstance(self._tokens[index], token_class) and
+                    self._tokens[index].is_head):
                 index -= 1
         except IndexError:
             return None
-        self._footnotes.extend(self.tokens[index:])
-        self.tokens[index:] = []
+        self._footnotes.extend(self._tokens[index:])
+        self._tokens[index:] = []
 
     def prepare(self, source):
         '''
@@ -102,6 +108,6 @@ class Scanner(object):
         return spaces.sub('', procceed)
 
     def clear(self):
-        self.tokens = []
+        self._tokens = []
         self._links = []
         self._footnotes = []
