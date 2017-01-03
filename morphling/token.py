@@ -88,7 +88,7 @@ class TokenBase(object):
     def as_html(self, renderer):
         '''
         output token as html
-            :params inline_scanner: instance of InlineScanner
+            :params renderer: instance of InlineScanner
         '''
         raise NotImplementedError
 

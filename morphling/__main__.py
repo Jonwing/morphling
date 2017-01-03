@@ -10,7 +10,6 @@ def print_usage():
     print('''Usage: python -m morphling  FILE_PATH [OPTIONS...]
 Morphling is a tool that converts markdown to html files.
 Options:
-  -f/--source SOURCE FILE        path to source file
   -o/--output=OUTPUT FILE        path to output file
   -e/--escape=no                 specify if you don't need to escape
 ''')
