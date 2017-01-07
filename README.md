@@ -1,5 +1,5 @@
 # morphling
-morphling is a convenient tool that converts markdown to HTML.
+Morphling is a convenient tool that converts Markdown to HTML.
 ---
 
 ## Usage
