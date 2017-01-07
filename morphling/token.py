@@ -90,7 +90,7 @@ class TokenBase(object):
         output token as html
             :params renderer: instance of InlineScanner
         '''
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def _shrink_blank_characters(self, s):
         '''
