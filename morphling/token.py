@@ -440,6 +440,7 @@ class Table(BlockToken):
         return cells
 
     def as_html(self, renderer):
+        self.renderer = renderer
         cell = header = body = renderer.placeholder
         for index, value in enumerate(self.header):
             align = self.align[index] if index < len(self.align) else None
@@ -453,13 +454,10 @@ class Table(BlockToken):
                 cell += self.format_cell(value, header=True, align=align)
             body += self.format_row(cell)
 
-        return (
-            '<table>\n<thead>%s</thead>\n'
-            '<tbody>\n%s</tbody>\n</table>\n'
-        ) % (header, body)
+        return renderer.table(header, body)
 
     def format_row(self, content):
-        return '<tr>\n%s</tr>\n' % content
+        return self.renderer.tr(content)
 
     def format_cell(self, content, **options):
         '''
@@ -470,8 +468,8 @@ class Table(BlockToken):
         else:
             tag = 'td'
         if options.get('align'):
-            return '<%s style="text-align:%s">%s</%s>\n' % (tag, options['align'], content, tag)
-        return '<%s>%s</%s>\n' % (tag, content, tag)
+            return self.renderer.block_html(tag, content, style='text-align:%s' % options['align'])
+        return self.renderer.block_html(tag, content)
 
 
 class NpTable(Table):
@@ -591,9 +589,10 @@ class InlineLink(InlineToken):
             else:
                 return renderer.img(self.link, alt=self.content)
         elif self.is_head:
-            output = '<a href=%s>' % self.link
+            output = renderer.open_tag('a', href=self.link)
+            # output = '<a href=%s>' % self.link
         else:
-            output = '</a>'
+            output = renderer.close_tag('a')
         return output
 
 
