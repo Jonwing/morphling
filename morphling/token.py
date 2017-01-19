@@ -584,13 +584,9 @@ class InlineLink(InlineToken):
 
     def as_html(self, renderer):
         if self.is_head is None:
-            if self.title:
-                return renderer.img(self.link, self.content, self.title)
-            else:
-                return renderer.img(self.link, alt=self.content)
+            return renderer.img(self.link, self.content, self.title)
         elif self.is_head:
             output = renderer.open_tag('a', href=self.link)
-            # output = '<a href=%s>' % self.link
         else:
             output = renderer.close_tag('a')
         return output
