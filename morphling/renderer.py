@@ -107,11 +107,11 @@ class Renderer(object):
         # return '<a href={addr}>{text}<a>'.format(addr=addr, text=text)
 
     def img(self, src, alt=None, title=None):
-        seg = '<img src=%s' % self.escape_link(src) if self._escape else src
+        seg = '<img src=%s' % (self.escape_link(src) if self._escape else src)
         if alt:
-            seg += 'alt=%s' % self.escape(alt) if self._escape else alt
+            seg += 'alt=%s' % (self.escape(alt) if self._escape else alt)
         if title:
-            seg += 'title=%s' % self.escape(title) if self._escape else title
+            seg += 'title=%s' % (self.escape(title) if self._escape else title)
         return seg + '>'
 
     def fence(self, code, language=None, escape=True):
