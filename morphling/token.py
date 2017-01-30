@@ -15,6 +15,13 @@ _block_tag = r'(?!(?:%s)\b)\w+%s' % ('|'.join(_inline_tags), _valid_end)
 
 
 class TokenBase(object):
+    '''
+    TokenBase is the base class of all token classes, each token class has attribute
+    ``regex``, which is a compiled pattern to match given soure via ``cls.match``. If
+     matched, a new instance of that class will be created.
+        :param matchs: match result of the compiled pattern
+        :param scanner: instance of Scanner
+    '''
     _blank_regex = re.compile(r'\s+')
     regex = None
 
@@ -99,20 +106,6 @@ class TokenBase(object):
         return self._blank_regex.sub(' ', s.lower())
 
 
-class BlockToken(TokenBase):
-
-    def as_html(self, renderer):
-        return '[%s to be rendered. content: %s]\n' % (
-            self.__class__.__name__, self.matchs.group(0))
-
-
-class InlineToken(TokenBase):
-
-    def as_html(self, renderer):
-        return '[%s to be rendered. content: %s]\n' % (
-            self.__class__.__name__, self.matchs.group(0))
-
-
 class SeperatedToken(TokenBase):
     '''
     for tokens that have seperated open and close tags.
@@ -122,7 +115,7 @@ class SeperatedToken(TokenBase):
         pass
 
 
-class BlockLink(BlockToken):
+class BlockLink(TokenBase):
     regex = re.compile(
         r'^ *\[([^^\]]+)\]: *'  # [key]:
         r'<?([^\s>]+)>?'  # <link> or link
@@ -143,7 +136,7 @@ class BlockLink(BlockToken):
         return self._refkey
 
 
-class BlockFootnote(BlockToken):
+class BlockFootnote(TokenBase):
     regex = re.compile(r'(\ ?\ ?\ ?)\[\^([^\]]*)\]:\s*(.*)')
 
     def setup(self):
@@ -163,7 +156,7 @@ class BlockFootnote(BlockToken):
         return renderer.close_tag('li')
 
 
-class NewLine(BlockToken):
+class NewLine(TokenBase):
     regex = re.compile(r'^\n+')
 
     def setup(self):
@@ -174,7 +167,7 @@ class NewLine(BlockToken):
         return '\n'
 
 
-class BlockCode(BlockToken):
+class BlockCode(TokenBase):
     regex = re.compile(r'^( {4}[^\n]+\n*)+')
     _leading_pattern = re.compile(r'^ {4}', re.M)
 
@@ -186,7 +179,7 @@ class BlockCode(BlockToken):
         return renderer.fence(self.content.rstrip('\n'))
 
 
-class Fence(BlockToken):
+class Fence(TokenBase):
     regex = re.compile(
         r'^ *(`{3,}|~{3,}) *(\S+)? *\n'  # ```lang
         r'([\s\S]+?)\s*'
@@ -202,14 +195,14 @@ class Fence(BlockToken):
         return renderer.fence(self.content.rstrip('\n'), self.language)
 
 
-class Hrule(BlockToken):
+class Hrule(TokenBase):
     regex = re.compile(r'^ {0,3}[-*_](?: *[-*_]){2,} *(?:\n+|$)')
 
     def as_html(self, renderer):
         return renderer.hr
 
 
-class Heading(BlockToken):
+class Heading(TokenBase):
     regex = re.compile(r'^ *(#{1,6}) *([^\n]+?) *#* *(?:\n+|$)')
 
     def setup(self):
@@ -243,7 +236,7 @@ class LHeading(Heading):
         self.scanner.add_token(tail)
 
 
-class BlockQuote(BlockToken):
+class BlockQuote(TokenBase):
     regex = re.compile(r'^( *>[^\n]+(\n[^\n]+)*\n*)+')
     _leading_pattern = re.compile(r'^ *> ?', re.M)
     is_head = None  # leading mark
@@ -266,7 +259,7 @@ class BlockQuote(BlockToken):
         return renderer.close_tag('blockquote', breakline=True)
 
 
-class ListItem(BlockToken):
+class ListItem(TokenBase):
     regex = re.compile(
         r'^(( *)(?:[*+-]|\d+\.) [^\n]*'
         r'(?:\n(?!\2(?:[*+-]|\d+\.) )[^\n]*)*)',
@@ -283,11 +276,11 @@ class ListItem(BlockToken):
         return renderer.close_tag('li', breakline=True)
 
 
-class ListBullet(BlockToken):
+class ListBullet(TokenBase):
     regex = re.compile(r'^ *(?:[*+-]|\d+\.) +')
 
 
-class ListBlock(BlockToken):
+class ListBlock(TokenBase):
     regex = re.compile(
         r'^( *)([*+-]|\d+\.) [\s\S]+?'
         r'(?:'
@@ -342,7 +335,7 @@ class ListBlock(BlockToken):
         return renderer.close_tag(tag, breakline=False)
 
 
-class Paragraph(BlockToken):
+class Paragraph(TokenBase):
     regex = re.compile(
         r'^((?:[^\n]+\n?(?!'
         r'%s|%s|%s|%s|%s|%s|%s|%s|%s'
@@ -374,7 +367,7 @@ class Paragraph(BlockToken):
         return renderer.close_tag('p', breakline=True)
 
 
-class BlockHtml(BlockToken):
+class BlockHtml(TokenBase):
     regex = re.compile(
         r'^ *(?:%s|%s|%s) *(?:\n{2,}|\s*$)' % (
             r'<!--[\s\S]*?-->',
@@ -408,7 +401,7 @@ class BlockHtml(BlockToken):
         return renderer.escape(html)
 
 
-class Table(BlockToken):
+class Table(TokenBase):
     regex = re.compile(
         r'^ *\|(.+)\n *\|( *[-:]+[-| :]*)\n((?: *\|.*(?:\n|$))*)\n*'
     )
@@ -485,7 +478,7 @@ class NpTable(Table):
         return cells
 
 
-class BlockText(BlockToken):
+class BlockText(TokenBase):
     regex = re.compile(r'^[^\n]+')
 
     def setup(self):
@@ -506,14 +499,14 @@ class BlockText(BlockToken):
 # ########## InlineTokens ################ #
 
 
-class Escape(InlineToken):
+class Escape(TokenBase):
     regex = re.compile(r'^\\([\\`*{}\[\]()#+\-.!_>~|])')  # \* \+ \! ....
 
     def as_html(self, renderer):
         return renderer.escape(self.matchs.group(1))
 
 
-class InlineHtml(InlineToken):
+class InlineHtml(TokenBase):
     _tags = [
         'a', 'em', 'strong', 'small', 's', 'cite', 'q', 'dfn', 'abbr', 'data',
         'time', 'code', 'var', 'samp', 'kbd', 'sub', 'sup', 'i', 'b', 'u', 'mark',
@@ -547,7 +540,7 @@ class InlineHtml(InlineToken):
         return '</%s>' % self.tag
 
 
-class InlineAutoLink(InlineToken):
+class InlineAutoLink(TokenBase):
     regex = re.compile(r'^<([^ >]+(@|:)[^ >]+)>')
 
     def as_html(self, renderer):
@@ -556,7 +549,7 @@ class InlineAutoLink(InlineToken):
         return renderer.link(addr, link)
 
 
-class InlineLink(InlineToken):
+class InlineLink(TokenBase):
     regex = re.compile(
         r'^!?\[('
         r'(?:\[[^^\]]*\]|[^\[\]]|\](?=[^\[]*\]))*'
@@ -592,7 +585,7 @@ class InlineLink(InlineToken):
         return output
 
 
-class InlineRefLink(InlineToken):
+class InlineRefLink(TokenBase):
     regex = re.compile(
         r'^!?\[('
         r'(?:\[[^^\]]*\]|[^\[\]]|\](?=[^\[]*\]))*'
@@ -612,21 +605,21 @@ class InlineRefLink(InlineToken):
         return renderer.link(link, self.title)
 
 
-class InlineNolink(InlineToken):
+class InlineNolink(TokenBase):
     regex = re.compile(r'^!?\[((?:\[[^\]]*\]|[^\[\]])*)\]')
 
     def as_html(self, renderer):
         return renderer.link('#', self.matchs.group(0))
 
 
-class InlineUrl(InlineToken):
+class InlineUrl(TokenBase):
     regex = re.compile(r'''^(https?:\/\/[^\s<]+[^<.,:;"')\]\s])''')
 
     def as_html(self, renderer):
         return renderer.escape(self.matchs.group(1))
 
 
-class DoubleEmphasis(InlineToken):
+class DoubleEmphasis(TokenBase):
     regex = re.compile(
         r'^_{2}([\s\S]+?)_{2}(?!_)'
         r'|'
@@ -637,7 +630,7 @@ class DoubleEmphasis(InlineToken):
         return renderer.double_emphasis(self.matchs.group(2) or self.matchs.group(1))
 
 
-class Emphasis(InlineToken):
+class Emphasis(TokenBase):
     regex = re.compile(
         r'^\b_((?:__|[^_])+?)_\b'
         r'|'
@@ -648,7 +641,7 @@ class Emphasis(InlineToken):
         return renderer.emphasis(self.matchs.group(2) or self.matchs.group(1))
 
 
-class Code(InlineToken):
+class Code(TokenBase):
     regex = re.compile(r'^(`+)\s*([\s\S]*?[^`])\s*\1(?!`)')
 
     def as_html(self, renderer):
@@ -656,14 +649,14 @@ class Code(InlineToken):
         return renderer.code(content)
 
 
-class LineBreak(InlineToken):
+class LineBreak(TokenBase):
     regex = re.compile(r'^ {2,}\n(?!\s*$)')
 
     def as_html(self, renderer):
         return renderer.line_break
 
 
-class StrikeThrough(InlineToken):
+class StrikeThrough(TokenBase):
     '''
     strikethrough like ~~text~~
     '''
@@ -673,7 +666,7 @@ class StrikeThrough(InlineToken):
         return renderer.strikethrough(self.matchs.group(1))
 
 
-class InlineFootnote(InlineToken):
+class InlineFootnote(TokenBase):
     regex = re.compile(r'^\[\^([^\]]+)\]')
 
     def setup(self):
@@ -692,7 +685,7 @@ class InlineFootnote(InlineToken):
         return renderer.footnote_ref(self.ref_key, self.index)
 
 
-class InlineText(InlineToken):
+class InlineText(TokenBase):
     regex = re.compile(r'^[\s\S]+?(?=[\\<!\[_*`~]|https?://| {2,}\n|$)')
 
     def as_html(self, renderer):
